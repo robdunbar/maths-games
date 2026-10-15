@@ -55,6 +55,11 @@ function currentTime(): number {
   return Date.now()
 }
 
+function matchesPortraitPhone(): boolean {
+  return typeof window !== 'undefined'
+    && window.matchMedia('(max-width: 600px) and (orientation: portrait)').matches
+}
+
 function initialAnswers(round: Round): Record<string, QuestionState> {
   return Object.fromEntries(
     round.questions.map((question) => [question.id, { value: '', status: 'idle', burst: 0 }]),
@@ -73,14 +78,21 @@ function App() {
   const [isNewRecord, setIsNewRecord] = useState(false)
   const [records, setRecords] = useState<Record<string, number>>(loadRecords)
   const [showSettings, setShowSettings] = useState(false)
+  const [isPortraitPhone, setIsPortraitPhone] = useState(matchesPortraitPhone)
+  const [visibleHeight, setVisibleHeight] = useState(() => window.visualViewport?.height ?? window.innerHeight)
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const [selectedQuestionId, setSelectedQuestionId] = useState(round.questions[0].id)
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const mobileInputRef = useRef<HTMLInputElement | null>(null)
   const startTimeRef = useRef(0)
+  const fullViewportHeightRef = useRef(Math.max(window.innerHeight, window.visualViewport?.height ?? 0))
 
   const correct = Object.values(answers).filter((answer) => answer.status === 'correct').length
   const complete = correct === 12
   const accuracy = guesses === 0 ? 100 : Math.round((correct / guesses) * 100)
   const levelKey = getLevelKey(settings)
   const bestTime = records[levelKey]
+  const selectedQuestion = round.questions.find((question) => question.id === selectedQuestionId) ?? round.questions[0]
 
   useEffect(() => {
     if (screen !== 'game' || complete) return
@@ -88,11 +100,35 @@ function App() {
     return () => window.clearInterval(interval)
   }, [screen, complete])
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 600px) and (orientation: portrait)')
+    const updateMode = () => setIsPortraitPhone(mediaQuery.matches)
+    mediaQuery.addEventListener('change', updateMode)
+    return () => mediaQuery.removeEventListener('change', updateMode)
+  }, [])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    const updateHeight = () => {
+      const nextHeight = viewport?.height ?? window.innerHeight
+      fullViewportHeightRef.current = Math.max(fullViewportHeightRef.current, nextHeight)
+      setVisibleHeight(nextHeight)
+      setKeyboardOpen(fullViewportHeightRef.current - nextHeight > 120)
+    }
+    viewport?.addEventListener('resize', updateHeight)
+    window.addEventListener('resize', updateHeight)
+    return () => {
+      viewport?.removeEventListener('resize', updateHeight)
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [])
+
   function startRound(nextSettings = settings) {
     const nextRound = createRound(nextSettings)
     setSettings(nextSettings)
     setRound(nextRound)
     setAnswers(initialAnswers(nextRound))
+    setSelectedQuestionId(nextRound.questions[0].id)
     setGuesses(0)
     startTimeRef.current = currentTime()
     setElapsedTime(0)
@@ -115,15 +151,23 @@ function App() {
     }))
   }
 
-  function focusNext(currentId: string) {
+  function getNextQuestion(currentId: string): Question | undefined {
     const currentIndex = round.questions.findIndex((question) => question.id === currentId)
     for (let offset = 1; offset < round.questions.length; offset += 1) {
       const next = round.questions[(currentIndex + offset) % round.questions.length]
-      if (answers[next.id].status !== 'correct') {
-        window.setTimeout(() => inputRefs.current[next.id]?.focus(), 100)
-        return
-      }
+      if (answers[next.id].status !== 'correct') return next
     }
+    return undefined
+  }
+
+  function focusNext(currentId: string) {
+    const next = getNextQuestion(currentId)
+    if (!next) return
+    setSelectedQuestionId(next.id)
+    window.setTimeout(() => {
+      if (isPortraitPhone) mobileInputRef.current?.focus()
+      else inputRefs.current[next.id]?.focus()
+    }, 100)
   }
 
   function submitAnswer(event: FormEvent, question: Question) {
@@ -246,7 +290,10 @@ function App() {
   }
 
   return (
-    <main className="game-page">
+    <main
+      className={`game-page ${isPortraitPhone ? 'portrait-phone' : ''} ${keyboardOpen ? 'keyboard-open' : ''}`}
+      style={{ '--visible-height': `${visibleHeight}px` } as React.CSSProperties}
+    >
       <header className="game-header">
         <button className="back-button" onClick={() => setScreen('setup')} type="button">← Change game</button>
         <div className="mini-brand">Clock <em>Maths</em></div>
@@ -273,30 +320,47 @@ function App() {
             const answer = answers[question.id]
             return (
               <div className="question-position" style={{ '--angle': `${angle}deg` } as React.CSSProperties} key={question.id}>
-                <form
-                  className={`question-card ${answer.status}`}
-                  onSubmit={(event) => submitAnswer(event, question)}
-                  style={{ '--counter-angle': `${-angle}deg` } as React.CSSProperties}
-                >
-                  <label htmlFor={`answer-${question.id}`}>{question.value}</label>
-                  <div className="answer-row">
-                    <input
-                      ref={(node) => { inputRefs.current[question.id] = node }}
-                      id={`answer-${question.id}`}
-                      aria-label={`${question.value} ${operationSymbols[settings.operation]} ${round.centerNumber}`}
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="off"
-                      value={answer.value}
-                      disabled={answer.status === 'correct'}
-                      onChange={(event) => updateValue(question, event.target.value)}
-                    />
-                    <button type="submit" aria-label={`Check answer for ${question.value}`} tabIndex={answer.status === 'correct' ? -1 : 0}>
-                      {answer.status === 'correct' ? '✓' : '›'}
-                    </button>
-                  </div>
-                  {answer.status === 'correct' && <Firework key={answer.burst} />}
-                </form>
+                {isPortraitPhone ? (
+                  <button
+                    className={`question-marker ${answer.status} ${selectedQuestion.id === question.id ? 'selected' : ''}`}
+                    onClick={() => {
+                      setSelectedQuestionId(question.id)
+                      if (answer.status !== 'correct') window.setTimeout(() => mobileInputRef.current?.focus(), 0)
+                    }}
+                    style={{ '--counter-angle': `${-angle}deg` } as React.CSSProperties}
+                    type="button"
+                    aria-label={`${question.value} ${operationSymbols[settings.operation]} ${round.centerNumber}${answer.status === 'correct' ? ', correct' : ''}`}
+                  >
+                    <span>{question.value}</span>
+                    {answer.status === 'correct' && <b>✓</b>}
+                    {answer.status === 'correct' && <Firework key={answer.burst} />}
+                  </button>
+                ) : (
+                  <form
+                    className={`question-card ${answer.status}`}
+                    onSubmit={(event) => submitAnswer(event, question)}
+                    style={{ '--counter-angle': `${-angle}deg` } as React.CSSProperties}
+                  >
+                    <label htmlFor={`answer-${question.id}`}>{question.value}</label>
+                    <div className="answer-row">
+                      <input
+                        ref={(node) => { inputRefs.current[question.id] = node }}
+                        id={`answer-${question.id}`}
+                        aria-label={`${question.value} ${operationSymbols[settings.operation]} ${round.centerNumber}`}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="off"
+                        value={answer.value}
+                        disabled={answer.status === 'correct'}
+                        onChange={(event) => updateValue(question, event.target.value)}
+                      />
+                      <button type="submit" aria-label={`Check answer for ${question.value}`} tabIndex={answer.status === 'correct' ? -1 : 0}>
+                        {answer.status === 'correct' ? '✓' : '›'}
+                      </button>
+                    </div>
+                    {answer.status === 'correct' && <Firework key={answer.burst} />}
+                  </form>
+                )}
               </div>
             )
           })}
@@ -306,6 +370,32 @@ function App() {
           </div>
         </div>
       </div>
+
+      {isPortraitPhone && (
+        <form className={`mobile-answer-panel ${answers[selectedQuestion.id].status}`} onSubmit={(event) => submitAnswer(event, selectedQuestion)}>
+          <label htmlFor="mobile-answer">
+            <span>{selectedQuestion.value}</span>
+            <i>{operationSymbols[settings.operation]}</i>
+            <span>{round.centerNumber}</span>
+            <i>=</i>
+          </label>
+          <input
+            ref={mobileInputRef}
+            id="mobile-answer"
+            aria-label={`Answer for ${selectedQuestion.value} ${operationSymbols[settings.operation]} ${round.centerNumber}`}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            enterKeyHint="done"
+            autoComplete="off"
+            value={answers[selectedQuestion.id].value}
+            disabled={answers[selectedQuestion.id].status === 'correct'}
+            onChange={(event) => updateValue(selectedQuestion, event.target.value)}
+          />
+          <button type="submit" disabled={answers[selectedQuestion.id].status === 'correct'} aria-label="Check selected answer">
+            {answers[selectedQuestion.id].status === 'correct' ? '✓' : 'Check'}
+          </button>
+        </form>
+      )}
 
       <p className="sr-only" aria-live="polite">{announcement}</p>
 
