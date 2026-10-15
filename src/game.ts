@@ -18,6 +18,17 @@ export interface Round {
   questions: Question[]
 }
 
+export const operations: Operation[] = ['add', 'subtract', 'multiply', 'divide']
+export const levels: Level[] = [10, 20, 50, 100, 1000]
+
+export function createRandomSettings(random = Math.random): GameSettings {
+  return {
+    operation: operations[randomInteger(0, operations.length - 1, random)],
+    table: randomInteger(1, 12, random),
+    level: levels[randomInteger(0, levels.length - 1, random)],
+  }
+}
+
 export const operationSymbols: Record<Operation, string> = {
   add: '+',
   subtract: '−',

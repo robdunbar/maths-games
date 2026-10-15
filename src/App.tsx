@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useReward } from 'partycles'
 import {
+  createRandomSettings,
   createRound,
   type GameSettings,
-  type Level,
-  type Operation,
+  levels,
+  operations,
   operationNames,
   operationSymbols,
   type Question,
@@ -19,8 +20,6 @@ interface QuestionState {
   burst: number
 }
 
-const operations: Operation[] = ['add', 'subtract', 'multiply', 'divide']
-const levels: Level[] = [10, 20, 50, 100, 1000]
 const recordsStorageKey = 'clock-maths-best-times'
 
 function getLevelKey(settings: GameSettings): string {
@@ -68,7 +67,7 @@ function initialAnswers(round: Round): Record<string, QuestionState> {
 
 function App() {
   const [screen, setScreen] = useState<'setup' | 'game'>('setup')
-  const [settings, setSettings] = useState<GameSettings>({ operation: 'multiply', table: 4, level: 20 })
+  const [settings, setSettings] = useState<GameSettings>(createRandomSettings)
   const [round, setRound] = useState<Round>(() => createRound(settings))
   const [answers, setAnswers] = useState<Record<string, QuestionState>>(() => initialAnswers(round))
   const [guesses, setGuesses] = useState(0)
@@ -141,6 +140,11 @@ function App() {
   function handleSetupSubmit(event: FormEvent) {
     event.preventDefault()
     startRound()
+  }
+
+  function changeGame() {
+    setSettings(createRandomSettings())
+    setScreen('setup')
   }
 
   function updateValue(question: Question, value: string) {
@@ -218,9 +222,13 @@ function App() {
     return (
       <main className="setup-page">
         <section className="setup-card" aria-labelledby="setup-title">
-          <div className="brand-mark" aria-hidden="true"><span>12</span><i /><b>6</b></div>
-          <p className="eyebrow">Make every number count</p>
-          <h1 id="setup-title">Clock <em>Maths</em></h1>
+          <header className="setup-heading">
+            <div>
+              <p className="eyebrow">Make every number count</p>
+              <h1 id="setup-title">Clock <em>Maths</em></h1>
+            </div>
+            <div className="brand-mark" aria-hidden="true"><span>12</span><i /><b>6</b></div>
+          </header>
           <p className="intro">Pick your challenge, then solve your way around the clock.</p>
 
           <form onSubmit={handleSetupSubmit}>
@@ -295,7 +303,7 @@ function App() {
       style={{ '--visible-height': `${visibleHeight}px` } as React.CSSProperties}
     >
       <header className="game-header">
-        <button className="back-button" onClick={() => setScreen('setup')} type="button">← Change game</button>
+        <button className="back-button" onClick={changeGame} type="button">← Change game</button>
         <div className="mini-brand">Clock <em>Maths</em></div>
         <div className="score-card" aria-label={`${correct} correct from 12, ${guesses} guesses, time ${formatTime(elapsedTime)}`}>
           <span><b>{correct}</b>/12 correct</span>
@@ -414,7 +422,7 @@ function App() {
 
       {complete && (
         <div className="modal-backdrop" role="presentation">
-          <CelebrationFireworks />
+          <CelebrationFireworks slow={isPortraitPhone} />
           <section className="complete-card" role="dialog" aria-modal="true" aria-labelledby="complete-title">
             <div className="big-burst" aria-hidden="true">★</div>
             <p className="eyebrow">All the way around!</p>
@@ -427,7 +435,7 @@ function App() {
             <div className="accuracy"><span>{accuracy}%</span> accuracy</div>
             <div className="complete-actions">
               <button className="start-button" onClick={() => startRound()} type="button">Play again <span>↻</span></button>
-              <button className="text-button" onClick={() => setScreen('setup')} type="button">Change game</button>
+              <button className="text-button" onClick={changeGame} type="button">Change game</button>
             </div>
           </section>
         </div>
@@ -441,23 +449,23 @@ const fireworkPositions = [
   [17, 67], [35, 78], [57, 69], [76, 80], [91, 61],
 ]
 
-function CelebrationFireworks() {
+function CelebrationFireworks({ slow }: { slow: boolean }) {
   return (
     <div className="celebration-fireworks" aria-hidden="true">
       {fireworkPositions.map(([left, top], index) => (
-        <PartyclesFirework key={`${left}-${top}`} left={left} top={top} delay={index * 350} />
+        <PartyclesFirework key={`${left}-${top}`} left={left} top={top} delay={index * (slow ? 700 : 350)} slow={slow} />
       ))}
     </div>
   )
 }
 
-function PartyclesFirework({ left, top, delay }: { left: number; top: number; delay: number }) {
+function PartyclesFirework({ left, top, delay, slow }: { left: number; top: number; delay: number; slow: boolean }) {
   const originRef = useRef<HTMLElement>(null!)
   const { reward } = useReward(originRef, 'fireworks', {
     particleCount: 42,
     spread: 180,
-    startVelocity: 38,
-    duration: 900,
+    startVelocity: slow ? 19 : 38,
+    duration: slow ? 1800 : 900,
     colors: ['#f2643c', '#f8c44f', '#2d9d91', '#608bd5', '#ffffff'],
   })
 

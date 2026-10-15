@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { createRound, type GameSettings, type Operation } from './game'
+import { createRandomSettings, createRound, type GameSettings, levels, operations, type Operation } from './game'
 
 const fixedRandom = () => 0.42
 
 function settings(operation: Operation): GameSettings {
   return { operation, table: 7, level: 20 }
 }
+
+describe('createRandomSettings', () => {
+  it('chooses the lowest and highest supported settings', () => {
+    expect(createRandomSettings(() => 0)).toEqual({ operation: 'add', table: 1, level: 10 })
+    expect(createRandomSettings(() => 0.999)).toEqual({ operation: 'divide', table: 12, level: 1000 })
+  })
+
+  it('can choose every operation, table and level', () => {
+    const selections = Array.from({ length: 60 }, (_, index) => createRandomSettings(() => index / 60))
+    expect(new Set(selections.map(({ operation }) => operation))).toEqual(new Set(operations))
+    expect(new Set(selections.map(({ table }) => table))).toEqual(new Set(Array.from({ length: 12 }, (_, index) => index + 1)))
+    expect(new Set(selections.map(({ level }) => level))).toEqual(new Set(levels))
+  })
+})
 
 describe('createRound', () => {
   it('uses each multiplier from 1 to 12 exactly once', () => {

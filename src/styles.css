@@ -26,13 +26,14 @@ button { cursor: pointer; }
   place-items: center;
   padding: 42px 20px;
   position: relative;
-  overflow: hidden;
+  overflow: clip;
   background: radial-gradient(circle at 50% 35%, #fffefa 0, var(--cream) 58%, #f9efcf 100%);
 }
 
 .setup-card { width: min(780px, 100%); position: relative; z-index: 2; text-align: center; }
+.setup-heading { display: flex; align-items: center; justify-content: center; gap: 18px; }
 .brand-mark {
-  width: 70px; height: 70px; margin: 0 auto 18px; border: 5px solid var(--navy); border-radius: 50%;
+  width: 70px; height: 70px; flex-shrink: 0; border: 5px solid var(--navy); border-radius: 50%;
   position: relative; background: white; font-family: 'Fredoka', sans-serif; font-size: 11px;
 }
 .brand-mark span { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); }
@@ -148,8 +149,16 @@ legend, .choice-section > label { display: block; width: 100%; font-family: 'Fre
 .mobile-answer-panel { display: none; }
 
 @media (max-width: 720px) {
-  .setup-page { padding: 28px 15px; }
+  .setup-page { padding: 20px 15px; }
+  .setup-heading { gap: 12px; }
+  .setup-heading .eyebrow { font-size: 9px; letter-spacing: .12em; }
+  .setup-card h1 { font-size: clamp(36px, 9vw, 64px); white-space: nowrap; }
+  .intro { margin: 12px auto 20px; }
+  .choice-section { margin-top: 22px; }
+  .setup-card .start-button { margin-top: 24px; }
   .operation-grid { grid-template-columns: repeat(2, 1fr); }
+  .operation-option { padding: 10px 8px; }
+  .operation-symbol { width: 40px; height: 40px; font-size: 28px; }
   .number-picker { grid-template-columns: repeat(6, 1fr); }
   .level-picker { grid-template-columns: repeat(3, 1fr); }
   .game-page { padding: 10px 8px 14px; }
@@ -210,6 +219,7 @@ legend, .choice-section > label { display: block; width: 100%; font-family: 'Fre
   .portrait-phone .clock-center span { font-size: clamp(27px, 8vw, 34px); }
   .portrait-phone .clock-center strong { font-size: clamp(32px, 9vw, 40px); }
   .portrait-phone .firework { right: -13px; bottom: 15px; }
+  .portrait-phone .firework i { animation-duration: 1.5s; }
   .mobile-answer-panel {
     width: min(100%, 430px); min-height: 62px; margin: 0 auto; padding: 8px; border-radius: 17px; background: white;
     display: grid; grid-template-columns: auto minmax(72px, 1fr) auto; align-items: center; gap: 8px; box-shadow: 0 -2px 0 #eee3c5, 0 5px 0 #dfd4b8;
