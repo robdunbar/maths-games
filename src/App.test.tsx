@@ -35,6 +35,7 @@ describe('Clock Maths', () => {
     await user.type(firstInput, `${value * 4}{Enter}`)
     expect(firstInput.closest('form')).toHaveClass('correct')
     expect(firstInput).toBeDisabled()
+    expect(inputs[1]).toHaveFocus()
     expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('1/12 correct')
     expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('2 guesses')
   })

@@ -164,10 +164,10 @@ function App() {
     const next = getNextQuestion(currentId)
     if (!next) return
     setSelectedQuestionId(next.id)
-    window.setTimeout(() => {
-      if (isPortraitPhone) mobileInputRef.current?.focus()
-      else inputRefs.current[next.id]?.focus()
-    }, 100)
+    // Move focus before React disables the solved input so mobile browsers keep
+    // the numeric keyboard open between questions.
+    if (isPortraitPhone) mobileInputRef.current?.focus()
+    else inputRefs.current[next.id]?.focus()
   }
 
   function submitAnswer(event: FormEvent, question: Question) {
