@@ -48,6 +48,61 @@ describe('Clock Maths', () => {
     expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('2 guesses')
   })
 
+  it('checks answers and moves to the next unanswered box on Tab', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('radio', { name: /multiplication/i }))
+    await user.click(screen.getByRole('button', { name: '4' }))
+    await user.click(screen.getByRole('button', { name: /start the clock/i }))
+
+    const inputs = screen.getAllByRole('textbox')
+    const firstValue = Number(inputs[0].getAttribute('aria-label')!.split(' ')[0])
+    await user.type(inputs[0], `${firstValue * 4}{Tab}`)
+    expect(inputs[0].closest('form')).toHaveClass('correct')
+    expect(inputs[1]).toHaveFocus()
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('1 guesses')
+
+    await user.type(inputs[1], '999{Tab}')
+    expect(inputs[1].closest('form')).toHaveClass('wrong')
+    expect(inputs[2]).toHaveFocus()
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('2 guesses')
+
+    await user.tab()
+    expect(inputs[3]).toHaveFocus()
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('2 guesses')
+  })
+
+  it('checks answers on blur without changing the clicked focus or counting twice', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('radio', { name: /multiplication/i }))
+    await user.click(screen.getByRole('button', { name: '4' }))
+    await user.click(screen.getByRole('button', { name: /start the clock/i }))
+
+    const inputs = screen.getAllByRole('textbox')
+    const firstValue = Number(inputs[0].getAttribute('aria-label')!.split(' ')[0])
+    await user.type(inputs[0], String(firstValue * 4))
+    await user.click(inputs[2])
+    expect(inputs[0].closest('form')).toHaveClass('correct')
+    expect(inputs[2]).toHaveFocus()
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('1 guesses')
+
+    await user.type(inputs[2], '999')
+    await user.click(inputs[3])
+    expect(inputs[2].closest('form')).toHaveClass('wrong')
+    expect(inputs[3]).toHaveFocus()
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('2 guesses')
+
+    await user.click(inputs[2])
+    await user.click(inputs[3])
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('2 guesses')
+
+    await user.type(inputs[3], '999')
+    await user.click(inputs[3].closest('form')!.querySelector('button')!)
+    expect(inputs[3].closest('form')).toHaveClass('wrong')
+    expect(screen.getByLabelText(/correct from 12/i)).toHaveTextContent('3 guesses')
+  })
+
   it('shows and resets the saved best time for the current level', async () => {
     localStorage.setItem('clock-maths-best-times', JSON.stringify({ 'multiply-4': 12_345 }))
     const user = userEvent.setup()
@@ -131,6 +186,7 @@ describe('Clock Maths', () => {
     await user.click(screen.getByRole('button', { name: '4' }))
     await user.click(screen.getByRole('button', { name: /start the clock/i }))
 
+    expect(portrait ? screen.getByRole('textbox', { name: /answer for/i }) : screen.getAllByRole('textbox')[0]).toHaveFocus()
     for (let index = 0; index < 12; index += 1) {
       const input = portrait
         ? screen.getByRole('textbox', { name: /answer for/i })
@@ -144,5 +200,10 @@ describe('Clock Maths', () => {
       startVelocity: portrait ? 19 : 38,
       duration: portrait ? 1800 : 900,
     }))
+    await user.click(screen.getByRole('button', { name: /play again/i }))
+    const firstInput = portrait ? screen.getByRole('textbox', { name: /answer for/i }) : screen.getAllByRole('textbox')[0]
+    expect(firstInput).toHaveFocus()
+    await user.keyboard('9')
+    expect(firstInput).toHaveValue('9')
   })
 })

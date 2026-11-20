@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { type FocusEvent, FormEvent, useEffect, useRef, useState } from 'react'
 import { useReward } from 'partycles'
 import {
   createRandomSettings,
@@ -83,6 +83,7 @@ function App() {
   const [selectedQuestionId, setSelectedQuestionId] = useState(round.questions[0].id)
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const mobileInputRef = useRef<HTMLInputElement | null>(null)
+  const suppressAnswerBlurRef = useRef(false)
   const startTimeRef = useRef(0)
   const fullViewportHeightRef = useRef(Math.max(window.innerHeight, window.visualViewport?.height ?? 0))
 
@@ -92,6 +93,12 @@ function App() {
   const levelKey = getLevelKey(settings)
   const bestTime = records[levelKey]
   const selectedQuestion = round.questions.find((question) => question.id === selectedQuestionId) ?? round.questions[0]
+
+  useEffect(() => {
+    if (screen !== 'game') return
+    const firstInput = mobileInputRef.current ?? inputRefs.current[round.questions[0].id]
+    firstInput?.focus()
+  }, [screen, round])
 
   useEffect(() => {
     if (screen !== 'game' || complete) return
@@ -170,14 +177,19 @@ function App() {
     setSelectedQuestionId(next.id)
     // Move focus before React disables the solved input so mobile browsers keep
     // the numeric keyboard open between questions.
+    suppressAnswerBlurRef.current = true
     if (isPortraitPhone) mobileInputRef.current?.focus()
     else inputRefs.current[next.id]?.focus()
+    suppressAnswerBlurRef.current = false
   }
 
-  function submitAnswer(event: FormEvent, question: Question) {
+  function submitAnswer(event: FormEvent, question: Question, advanceOnIncorrect = false, advanceOnCorrect = true) {
     event.preventDefault()
     const answer = answers[question.id]
-    if (!answer.value || answer.status === 'correct') return
+    if (!answer.value || answer.status === 'correct') {
+      if (advanceOnIncorrect) focusNext(question.id)
+      return
+    }
 
     setGuesses((current) => current + 1)
     if (Number(answer.value) === question.answer) {
@@ -199,14 +211,22 @@ function App() {
       setAnnouncement(correct === 11
         ? `Clock complete! You got all 12 correct in ${guesses + 1} guesses.`
         : `${question.value} ${operationSymbols[settings.operation]} ${round.centerNumber} is correct!`)
-      focusNext(question.id)
+      if (advanceOnCorrect) focusNext(question.id)
     } else {
       setAnswers((current) => ({
         ...current,
         [question.id]: { ...current[question.id], status: 'wrong' },
       }))
       setAnnouncement('Not quite. Try that one again.')
+      if (advanceOnIncorrect) focusNext(question.id)
     }
+  }
+
+  function handleAnswerBlur(event: FocusEvent<HTMLInputElement>, question: Question) {
+    const nextTarget = event.relatedTarget
+    if (suppressAnswerBlurRef.current || answers[question.id].status !== 'idle') return
+    if (nextTarget instanceof HTMLButtonElement && nextTarget.type === 'submit' && nextTarget.form === event.currentTarget.form) return
+    submitAnswer(event, question, false, false)
   }
 
   function resetCurrentRecord() {
@@ -361,6 +381,12 @@ function App() {
                         value={answer.value}
                         disabled={answer.status === 'correct'}
                         onChange={(event) => updateValue(question, event.target.value)}
+                        onBlur={(event) => handleAnswerBlur(event, question)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                            submitAnswer(event, question, true)
+                          }
+                        }}
                       />
                       <button type="submit" aria-label={`Check answer for ${question.value}`} tabIndex={answer.status === 'correct' ? -1 : 0}>
                         {answer.status === 'correct' ? '✓' : '›'}
@@ -398,6 +424,7 @@ function App() {
             value={answers[selectedQuestion.id].value}
             disabled={answers[selectedQuestion.id].status === 'correct'}
             onChange={(event) => updateValue(selectedQuestion, event.target.value)}
+            onBlur={(event) => handleAnswerBlur(event, selectedQuestion)}
           />
           <button type="submit" disabled={answers[selectedQuestion.id].status === 'correct'} aria-label="Check selected answer">
             {answers[selectedQuestion.id].status === 'correct' ? '✓' : 'Check'}

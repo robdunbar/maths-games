@@ -75,17 +75,21 @@ for (const setup of [
 
     const inputs = page.getByRole('textbox')
     await expect(inputs).toHaveCount(12)
+    await expect(inputs.first()).toBeFocused()
 
     for (let index = 0; index < 12; index += 1) {
       const input = inputs.nth(index)
       const label = await input.getAttribute('aria-label')
       if (!label) throw new Error('Answer input has no aria-label')
-      await input.fill(String(answerFor(label)))
+      if (index === 0) await page.keyboard.type(String(answerFor(label)))
+      else await input.fill(String(answerFor(label)))
       await input.press('Enter')
     }
 
     await expect(page.getByRole('dialog', { name: 'Clock complete' })).toBeVisible()
     await expect(page.getByText('accuracy', { exact: false })).toBeVisible()
+    await page.getByRole('button', { name: /Play again/i }).click()
+    await expect(inputs.first()).toBeFocused()
   })
 }
 
@@ -114,6 +118,76 @@ test('shows wrong feedback and resets the saved time for a level', async ({ page
   await expect(page.evaluate(() => JSON.parse(localStorage.getItem('clock-maths-best-times') ?? '{}'))).resolves.toEqual({})
 })
 
+test('Tab checks answers and moves between unanswered boxes on desktop', async ({ page }) => {
+  await openApp(page)
+  await chooseOperation(page, 'Multiplication')
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await startRound(page)
+
+  const inputs = page.getByRole('textbox')
+  const secondInput = inputs.nth(1)
+  const secondLabel = await secondInput.getAttribute('aria-label')
+  if (!secondLabel) throw new Error('Answer input has no aria-label')
+  await secondInput.fill(String(answerFor(secondLabel)))
+  await secondInput.press('Enter')
+
+  const firstInput = inputs.nth(0)
+  await firstInput.fill('999')
+  await firstInput.press('Tab')
+  await expect(firstInput.locator('xpath=ancestor::form')).toHaveClass(/wrong/)
+  await expect(inputs.nth(2)).toBeFocused()
+  await expect(page.getByLabel(/correct from 12/i)).toContainText('2 guesses')
+
+  await inputs.nth(2).press('Tab')
+  await expect(inputs.nth(3)).toBeFocused()
+  await expect(page.getByLabel(/correct from 12/i)).toContainText('2 guesses')
+})
+
+test('clicking away checks an answer without overriding focus or double-counting', async ({ page }) => {
+  await openApp(page)
+  await chooseOperation(page, 'Multiplication')
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await startRound(page)
+
+  const inputs = page.getByRole('textbox')
+  const firstInput = inputs.nth(0)
+  const firstLabel = await firstInput.getAttribute('aria-label')
+  if (!firstLabel) throw new Error('Answer input has no aria-label')
+  await firstInput.fill(String(answerFor(firstLabel)))
+  await inputs.nth(2).click()
+  await expect(firstInput.locator('xpath=ancestor::form')).toHaveClass(/correct/)
+  await expect(inputs.nth(2)).toBeFocused()
+  await expect(page.getByLabel(/correct from 12/i)).toContainText('1 guesses')
+
+  await inputs.nth(2).fill('999')
+  await inputs.nth(2).locator('xpath=ancestor::form').getByRole('button').click()
+  await expect(inputs.nth(2).locator('xpath=ancestor::form')).toHaveClass(/wrong/)
+  await expect(page.getByLabel(/correct from 12/i)).toContainText('2 guesses')
+})
+
+test('switching portrait-phone questions checks the previous answer', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+  await chooseOperation(page, 'Multiplication')
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await startRound(page)
+
+  const input = page.getByRole('textbox', { name: /Answer for/i })
+  const label = await input.getAttribute('aria-label')
+  if (!label) throw new Error('Portrait answer input has no aria-label')
+  const firstMarker = page.getByRole('button', { name: `${label.replace('Answer for ', '')}, correct`, exact: true })
+  const secondMarker = page.getByRole('button', { name: /^\d+ × 4$/ }).nth(1)
+  await input.fill(String(answerFor(label)))
+  await secondMarker.click()
+  await expect(firstMarker).toHaveClass(/correct/)
+  await expect(input).not.toHaveAttribute('aria-label', label)
+  await expect(page.getByLabel(/correct from 12/i)).toContainText('1 guesses')
+
+  await input.fill('999')
+  await page.getByRole('button', { name: 'Check selected answer' }).click()
+  await expect(page.getByLabel(/correct from 12/i)).toContainText('2 guesses')
+})
+
 test('completes a round with the portrait-phone answer panel', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openApp(page)
@@ -123,16 +197,20 @@ test('completes a round with the portrait-phone answer panel', async ({ page }) 
 
   await expect(page.getByRole('textbox', { name: /Answer for/i })).toBeVisible()
   await expect(page.getByRole('textbox')).toHaveCount(1)
+  await expect(page.getByRole('textbox', { name: /Answer for/i })).toBeFocused()
 
   for (let index = 0; index < 12; index += 1) {
     const input = page.getByRole('textbox', { name: /Answer for/i })
     const label = await input.getAttribute('aria-label')
     if (!label) throw new Error('Portrait answer input has no aria-label')
-    await input.fill(String(answerFor(label.replace('Answer for ', ''))))
+    if (index === 0) await page.keyboard.type(String(answerFor(label.replace('Answer for ', ''))))
+    else await input.fill(String(answerFor(label.replace('Answer for ', ''))))
     await input.press('Enter')
   }
 
   await expect(page.getByRole('dialog', { name: 'Clock complete' })).toBeVisible()
+  await page.getByRole('button', { name: /Play again/i }).click()
+  await expect(page.getByRole('textbox', { name: /Answer for/i })).toBeFocused()
 })
 
 for (const viewport of [
